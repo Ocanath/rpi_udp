@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <time.h>
 
 
 typedef union u32_fmt_t
@@ -83,9 +84,12 @@ void main(void)
 	printf("Bind success\r\n");
 		
 	int cli_len = sizeof(cliaddr);
+	uint64_t prev_nsec = 0;
+	struct timespec timestamp;
+	printf("sizeof long: %d\r\n", sizeof(long));
 	while(1)
 	{
-		
+
 	    int n = recvfrom(sockfd, (char *)rx_buf, MAX_UDP_RX_SIZE, MSG_WAITALL, ( struct sockaddr *) &cliaddr, &cli_len); 
 		if(n == -1)
 		{
@@ -101,14 +105,27 @@ void main(void)
 				if(get_checksum32((uint32_t*)rx_buf, u32_len-1) == fmt_buf[u32_len - 1].u32)
 				{
 					chk_match = 1;
-					
+
+					clock_gettime(CLOCK_MONOTONIC, &timestamp);
+
+					uint64_t nsec = (uint64_t)timestamp.tv_sec*1000000000 + (uint64_t)timestamp.tv_nsec % 1000000000;
+					uint64_t elapsed = nsec - prev_nsec;
+					prev_nsec = nsec;
+
+
 					//print formatted datas
 					printf("%s sent: ", inet_ntoa(cliaddr.sin_addr));
-					for(int i = 0; i < u32_len-2; i++)
+					for(int i = 0; i < u32_len-1; i++)
 					{
-						printf("%0.4f, ", fmt_buf[i].f32);
+						float f = fmt_buf[i].f32;
+						if(f >= 0)
+							printf("+%0.4f, ", f);
+						else
+							printf("%0.4f, ", f);
 					}
-					printf("%0.4f\r\n", fmt_buf[u32_len-2].f32);
+					float freq = 1000000000.f/((float)elapsed);
+
+					printf("%f hz\r\n", freq);
 				}
 			}
 			else if(chk_match == 0)
